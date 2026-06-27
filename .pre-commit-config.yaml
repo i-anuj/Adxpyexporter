@@ -1,0 +1,28 @@
+repos:
+
+  # ── 1. General file hygiene ─────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace       # removes trailing spaces on every line
+      - id: end-of-file-fixer         # ensures every file ends with a newline
+      - id: check-yaml                # validates .yml/.yaml files are valid
+      - id: check-ast                 # catches Python syntax errors instantly
+      - id: debug-statements          # blocks print() / breakpoint() left in code
+      - id: check-merge-conflict      # blocks accidental merge conflict markers (<<<<<<)
+      - id: check-added-large-files   # blocks files > 500kb being committed
+        args: ["--maxkb=500"]
+
+  # ── 2. Gitleaks: secret scanning ───────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks                  # blocks API keys, passwords, tokens from being committed
+
+  # ── 3. Ruff: lint + format (auto-fixes where safe) ─────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff                      # lint check — auto-fixes safe issues (unused imports, style)
+        args: ["--fix"]
+      - id: ruff-format               # auto-formats code (spacing, line length, quotes)

@@ -1,0 +1,14 @@
+set query_datascope='hotcache';
+let _since = ago(1d);
+raw_messages
+| where ingestion_time() > _since
+| where data has "ALL_PLANTS_GEOFENCES"
+| extend truckName = tostring(data.truckName),
+         accountId = tostring(data.accountId)
+| summarize request_count = count() by truckName, accountId
+| where request_count > 10
+| join kind=leftouter (
+    database("verifi-uat-kusto-devicemessages").external_table("dbo_organization")
+    | project code, ['title']
+) on $left.accountId == $right.code
+| project truckName, accountId, accountName = tostring(['title']), request_count

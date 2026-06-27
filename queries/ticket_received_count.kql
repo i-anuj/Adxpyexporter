@@ -1,0 +1,5 @@
+set query_datascope='hotcache';
+ticket_received
+| where ingestion_time() >= now() - 30m
+| summarize Messages = count() by locationId = tostring(locationId)
+| project Messages = tostring(Messages), LocationId = locationId

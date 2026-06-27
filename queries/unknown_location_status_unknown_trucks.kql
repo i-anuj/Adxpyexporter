@@ -1,0 +1,33 @@
+set query_datascope='hotcache';
+let _since = ago(12h);
+let _latestBin = toscalar(
+    raw_messages
+    | where ingestion_time() > _since
+    | where data has "ALL_PLANTS_GEOFENCES"
+    | summarize max(bin(ingestion_time(), 15m))
+);
+let Requests =
+raw_messages
+| where ingestion_time() > _since
+| where data has "ALL_PLANTS_GEOFENCES"
+| extend truckName = tostring(data.truckName),
+         timeBin = bin(ingestion_time(), 15m)
+| summarize arg_max(ingestion_time(), *) by truckName, timeBin;
+let Status =
+raw_messages
+| where ingestion_time() > _since
+| where data has "ConcreteStatus"
+| extend truckName = tostring(data.truckName),
+         status = tostring(data.event.locationStatus.status),
+         accountId = tostring(data.accountId),
+         timeBin = bin(ingestion_time(), 15m)
+| summarize arg_max(ingestion_time(), *) by truckName, timeBin;
+Requests
+| join kind=inner Status on truckName, timeBin
+| where timeBin == _latestBin
+| join kind=leftouter (
+    database("verifi-uat-kusto-devicemessages").external_table("dbo_organization")
+    | project code, ['title']
+) on $left.accountId == $right.code
+| project truckName, accountName = tostring(['title']), accountId, status
+| extend value = 1

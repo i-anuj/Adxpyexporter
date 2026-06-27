@@ -1,0 +1,126 @@
+name: CI — Lint, Scan and Test
+
+on:
+  push:
+    branches:
+      - adx-exporter
+
+jobs:
+
+  # ── 1. Gitleaks: scan for secrets ──────────────────────────────────────
+  gitleaks:
+    name: Gitleaks — secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 2. Trivy: scan dependencies for CVEs ───────────────────────────────
+  trivy:
+    name: Trivy — dependency CVE scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy on requirements.txt
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: requirements.txt
+          format: table
+          exit-code: 1
+          severity: HIGH,CRITICAL
+          vuln-type: library
+
+  # ── 3. Ruff: lint and format check ─────────────────────────────────────
+  ruff:
+    name: Ruff — lint and syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff check
+        run: ruff check .
+
+      - name: Run ruff format check
+        run: ruff format --check .
+
+  # ── 4. Tests ────────────────────────────────────────────────────────────
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: |
+          pip install pytest
+          pytest tests/ -v
+        env:
+          ADX_CLUSTER_URL: ${{ secrets.ADX_CLUSTER_URL }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+
+  # ── 6. Auto-create PR once all checks pass ──────────────────────────────
+  create-pr:
+    name: Auto-create PR to main
+    runs-on: ubuntu-latest
+    needs: [gitleaks, trivy, ruff, test]
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "Deploy: adx-exporter → main (${{ github.sha }})"
+          body: |
+            ## All CI checks passed — ready for review
+
+            **Branch:** `adx-exporter`
+            **Commit:** `${{ github.sha }}`
+            **Triggered by:** @${{ github.actor }}
+
+            ### CI checks completed
+            - Gitleaks — no secrets found
+            - Trivy — no HIGH/CRITICAL CVEs
+            - Ruff — lint and format clean
+            - Tests — all passed (includes KQL + __init__.py validation)
+
+            ### Reviewer checklist
+            - [ ] Code change looks correct
+            - [ ] Query logic reviewed (if KQL changed)
+            - [ ] Safe to deploy to production
+
+            ---
+            > **Merging this PR will trigger deployment to Azure Functions.**
+            > Approve → Merge → deploy fires automatically.
+            > This PR was auto-created by GitHub Actions after all CI checks passed.
+          base: main
+          branch: adx-exporter
+          labels: "ready-to-deploy"
+          draft: false

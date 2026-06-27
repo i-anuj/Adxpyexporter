@@ -1,0 +1,15 @@
+set query_datascope='hotcache';
+raw_messages
+| where ingestion_time() >= now() - 30m
+| extend msg_type = tostring(['data'].message_type),
+         event_type = tostring(['data'].event.event_type),
+         TruckId = tostring(truckId),
+         TruckName = tostring(['data'].truckName),
+         AccountId = tostring(['data'].accountId),
+         SenderMacId = tostring(['data'].sender_mac_id),
+         AzureTicketId = tostring(['data'].event.concrete_status.azureTicketId)
+| where msg_type == 'Event' and event_type == 'ConcreteStatus'
+| where isempty(TruckId) and isnotempty(AzureTicketId)
+| summarize Messages = count() by AccountId, TruckName, SenderMacId
+| join kind=inner (external_table('dbo_organization') | project code, ['title']) on $left.AccountId == $right.code
+| project Messages = tostring(Messages), TruckName = tostring(TruckName), SenderMacId = tostring(SenderMacId), Account = ['title']

@@ -1,0 +1,6 @@
+.python_packages
+__pycache__
+.venv
+*.pyc
+local.settings.json
+.DS_Store

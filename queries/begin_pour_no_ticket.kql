@@ -1,0 +1,14 @@
+set query_datascope='hotcache';
+concrete_status
+| where now() - 30m <= loadingTime
+| where status == 'BEGIN_POUR'
+| where ticketId == -1
+| project
+    AccountId = tostring(accountId),
+    TruckId = tostring(truckId)
+| summarize by AccountId, TruckId
+| join kind=leftouter (
+    database("verifi-uat-kusto-devicemessages").external_table("dbo_organization")
+    | project code, ['title']
+) on $left.AccountId == $right.code
+| summarize NTs = count() by Account = tostring(['title'])

@@ -1,0 +1,26 @@
+set query_datascope='hotcache';
+let _since = ago(12h);
+let Requests =
+raw_messages
+| where ingestion_time() > _since
+| where data has "ALL_PLANTS_GEOFENCES"
+| extend truckName = tostring(data.truckName),
+         timeBin = bin(ingestion_time(), 15m)
+| summarize arg_max(ingestion_time(), *) by truckName, timeBin;
+let Status =
+raw_messages
+| where ingestion_time() > _since
+| where data has "ConcreteStatus"
+| extend truckName = tostring(data.truckName),
+         status = tostring(data.event.locationStatus.status),
+         timeBin = bin(ingestion_time(), 15m)
+| summarize arg_max(ingestion_time(), *) by truckName, timeBin;
+Requests
+| join kind=inner Status on truckName, timeBin
+| summarize
+    total_requests = count(),
+    unknown_count  = countif(status == "UNKNOWN")
+  by timeBin
+| extend unknown_pct = round(todouble(unknown_count) / total_requests * 100, 2)
+| top 1 by timeBin desc
+| project total_requests, unknown_count, unknown_pct
