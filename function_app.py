@@ -33,9 +33,9 @@ def sanitise_row(row):
 def kusto_val(val):
     if val is None:
         return None
-    if hasattr(val, "total_seconds"):   # timedelta
+    if hasattr(val, "total_seconds"):  # timedelta
         return str(val)
-    if hasattr(val, "isoformat"):       # datetime / date
+    if hasattr(val, "isoformat"):  # datetime / date
         return val.isoformat()
     try:
         return str(val)
@@ -50,8 +50,7 @@ def execute_kql(kusto, kql):
     primary = response.primary_results[0]
     columns = [col.column_name for col in primary.columns]
     return [
-        {col: kusto_val(val) for col, val in zip(columns, row)}
-        for row in primary.rows
+        {col: kusto_val(val) for col, val in zip(columns, row)} for row in primary.rows
     ]
 
 
@@ -91,7 +90,9 @@ def run_query(kusto, query_def):
 app = func.FunctionApp()
 
 
-@app.timer_trigger(schedule="0 */5 * * * *", arg_name="timer", run_on_startup=False, use_monitor=False)
+@app.timer_trigger(
+    schedule="0 */5 * * * *", arg_name="timer", run_on_startup=False, use_monitor=False
+)
 def adx_exporter(timer: func.TimerRequest) -> None:
     start = time.time()
     logger.info("function started")
@@ -107,19 +108,25 @@ def adx_exporter(timer: func.TimerRequest) -> None:
         kusto = None
         try:
             logger.info("connecting to %s", ADX_CLUSTER_URL)
-            kcsb = KustoConnectionStringBuilder.with_aad_managed_service_identity_authentication(ADX_CLUSTER_URL)
+            kcsb = KustoConnectionStringBuilder.with_aad_managed_service_identity_authentication(
+                ADX_CLUSTER_URL
+            )
             kusto = KustoClient(kcsb)
             logger.info("kusto client created for %s", ADX_CLUSTER_URL)
         except Exception as e:
             logger.error("failed to connect to ADX: %s", repr(e))
-            send_event(dd_client, "ADX Exporter: ADX connection failed", safe_str(e), alert_type="error")
+            send_event(
+                dd_client,
+                "ADX Exporter: ADX connection failed",
+                safe_str(e),
+                alert_type="error",
+            )
             logger.info("total execution time: %.2fs", time.time() - start)
             return  # heartbeat NOT sent — ADX connection failed
 
         try:
             all_rows = {}
             failed_queries = set()
-
 
             with ThreadPoolExecutor(max_workers=max(1, len(QUERIES))) as executor:
                 futures = {
@@ -162,20 +169,36 @@ def adx_exporter(timer: func.TimerRequest) -> None:
                     metric_value = row.get(query_def["metric_value_col"])
 
                     if metric_value is None:
-                        logger.warning("skipping row %d in [%s]: metric_value is None | row=%s", idx, name, row)
+                        logger.warning(
+                            "skipping row %d in [%s]: metric_value is None | row=%s",
+                            idx,
+                            name,
+                            row,
+                        )
                         continue
 
                     try:
                         value = float(metric_value)
                     except (TypeError, ValueError):
-                        logger.warning("skipping row %d in [%s]: metric_value not numeric (%s)", idx, name, metric_value)
+                        logger.warning(
+                            "skipping row %d in [%s]: metric_value not numeric (%s)",
+                            idx,
+                            name,
+                            metric_value,
+                        )
                         continue
 
                     try:
                         sanitised = sanitise_row(row)
                         tags = query_def["tags_fn"](sanitised)
                     except Exception as e:
-                        logger.warning("skipping row %d in [%s]: tags_fn raised error: %s | row=%s", idx, name, repr(e), row)
+                        logger.warning(
+                            "skipping row %d in [%s]: tags_fn raised error: %s | row=%s",
+                            idx,
+                            name,
+                            repr(e),
+                            row,
+                        )
                         continue
 
                     all_series.append(
@@ -190,44 +213,67 @@ def adx_exporter(timer: func.TimerRequest) -> None:
 
                 logger.info("%d series built for [%s]", built, name)
 
-
             duration = round(time.time() - start, 2)
             heartbeat_value = 0.0 if failed_queries else 1.0
 
-            all_series.extend([
-                Series(
-                    metric="adx.prd.function_heartbeat",
-                    type="gauge",
-                    points=[Point([float(now), heartbeat_value])],
-                    tags=["env:test-verifi-python", "source:adx-exporter"],
-                ),
-                Series(
-                    metric="adx.prd.function_duration_seconds",
-                    type="gauge",
-                    points=[Point([float(now), duration])],
-                    tags=["env:test-verifi-python", "source:adx-exporter"],
-                ),
-            ])
+            all_series.extend(
+                [
+                    Series(
+                        metric="adx.prd.function_heartbeat",
+                        type="gauge",
+                        points=[Point([float(now), heartbeat_value])],
+                        tags=["env:test-verifi-python", "source:adx-exporter"],
+                    ),
+                    Series(
+                        metric="adx.prd.function_duration_seconds",
+                        type="gauge",
+                        points=[Point([float(now), duration])],
+                        tags=["env:test-verifi-python", "source:adx-exporter"],
+                    ),
+                ]
+            )
             logger.info(
                 "heartbeat=%.0f | duration=%.2fs | failed_queries=%s",
-                heartbeat_value, duration, failed_queries or "none",
+                heartbeat_value,
+                duration,
+                failed_queries or "none",
             )
 
             try:
-                logger.info("sending %d total series to Datadog (%s)...", len(all_series), DD_SITE)
-                result = MetricsApi(dd_client).submit_metrics(body=MetricsPayload(series=all_series))
-                status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
+                logger.info(
+                    "sending %d total series to Datadog (%s)...",
+                    len(all_series),
+                    DD_SITE,
+                )
+                result = MetricsApi(dd_client).submit_metrics(
+                    body=MetricsPayload(series=all_series)
+                )
+                status = (
+                    result.get("status")
+                    if isinstance(result, dict)
+                    else getattr(result, "status", None)
+                )
                 if status == "ok":
                     logger.info("all %d metrics sent successfully", len(all_series))
                 else:
                     raise Exception(f"unexpected status: {status}")
             except Exception as e:
                 logger.error("SEND step failed: %s", repr(e))
-                send_event(dd_client, "ADX Exporter: metrics send failed", safe_str(e), alert_type="error")
-                
+                send_event(
+                    dd_client,
+                    "ADX Exporter: metrics send failed",
+                    safe_str(e),
+                    alert_type="error",
+                )
+
         except Exception as e:
             logger.error("unexpected error in main flow: %s", repr(e))
-            send_event(dd_client, "ADX Exporter: unexpected error", safe_str(e), alert_type="error")
+            send_event(
+                dd_client,
+                "ADX Exporter: unexpected error",
+                safe_str(e),
+                alert_type="error",
+            )
             raise
         finally:
             if kusto is not None:

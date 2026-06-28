@@ -20,6 +20,7 @@ INIT_PY = os.path.join(QUERIES_DIR, "__init__.py")
 
 # ── 1. __init__.py — every .kql file on disk must be referenced ───────────
 
+
 def test_every_kql_file_referenced_in_init():
     """
     Every .kql file in queries/ must be referenced in queries/__init__.py.
@@ -34,13 +35,14 @@ def test_every_kql_file_referenced_in_init():
             missing.append(filename)
 
     assert not missing, (
-        f"These .kql files are not referenced in queries/__init__.py:\n"
+        "These .kql files are not referenced in queries/__init__.py:\n"
         + "\n".join(f"  - {f}" for f in missing)
         + "\n\nAdd each one to the QUERIES list in queries/__init__.py"
     )
 
 
 # ── 2. QUERIES list — every entry must be valid and complete ──────────────
+
 
 def test_queries_list_not_empty():
     """QUERIES list must have at least one entry."""
@@ -52,28 +54,25 @@ def test_every_query_has_required_fields():
     required = {"name", "metric_name", "metric_value_col", "tags_fn", "kql"}
     for q in QUERIES:
         missing = required - q.keys()
-        assert not missing, (
-            f"Query '{q.get('name', 'unknown')}' is missing fields: {missing}"
-        )
+        assert (
+            not missing
+        ), f"Query '{q.get('name', 'unknown')}' is missing fields: {missing}"
 
 
 def test_every_query_kql_not_empty():
     """Every query's KQL string must not be empty."""
     for q in QUERIES:
-        assert q["kql"].strip() != "", (
-            f"Query '{q['name']}' has an empty KQL string"
-        )
+        assert q["kql"].strip() != "", f"Query '{q['name']}' has an empty KQL string"
 
 
 def test_every_query_tags_fn_is_callable():
     """Every query's tags_fn must be a callable (lambda or function)."""
     for q in QUERIES:
-        assert callable(q["tags_fn"]), (
-            f"Query '{q['name']}' tags_fn is not callable"
-        )
+        assert callable(q["tags_fn"]), f"Query '{q['name']}' tags_fn is not callable"
 
 
 # ── 3. sanitise_row — cleans ADX row data before sending to Datadog ──────
+
 
 def test_sanitise_row_none_becomes_unknown():
     """None values must be replaced with the string 'unknown'."""
@@ -97,6 +96,7 @@ def test_sanitise_row_empty_row():
 
 
 # ── 4. safe_tag — builds Datadog tags from row values ────────────────────
+
 
 def test_safe_tag_normal():
     """Normal tag must be built as key:value."""
@@ -122,6 +122,7 @@ def test_safe_tag_number_value():
 
 
 # ── 5. kusto_val — converts ADX column values to safe Python types ────────
+
 
 def test_kusto_val_none_returns_none():
     """None must pass through as None (handled separately by sanitise_row)."""
