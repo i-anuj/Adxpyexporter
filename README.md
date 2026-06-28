@@ -4,71 +4,6 @@ An Azure Function that runs every 5 minutes, queries Azure Data Explorer (ADX/Ku
 
 ---
 
-## How the CI/CD pipeline works
-
-```
-git checkout -b kql/<query-name>
-        ↓
-CI runs automatically:
-  • Gitleaks   — secret scan
-  • Trivy      — CVE scan on dependencies
-  • Ruff       — lint + format check
-  • pytest     — checks __init__.py updated + unit tests
-        ↓
-All pass → auto-PR created: kql/<query-name> → main
-        ↓
-1 approver reviews and approves → merges into main
-        ↓
-Deploy fires automatically → Azure Functions (prod)
-```
-
-> If the PR is **not approved**, deployment never runs.
-> CI only triggers on branches matching `kql/**` with changes to `queries/`.
-> Direct pushes to `main` are blocked by branch protection — all changes must go through a reviewed PR.
-
----
-
-## First-time GitHub repo setup
-
-After creating the repo, configure the following:
-
-### 1. Branch protection — `main`
-
-Go to **Settings → Branches → Add rule** for `main`:
-
-- Require a pull request before merging
-- Require approvals: **1**
-- Require status checks to pass before merging — **required, not optional**. Without this, an approver can merge even if CI failed. With it, GitHub physically blocks the merge button until all checks pass. Select these 4 checks:
-  - `Gitleaks — secret scan`
-  - `Trivy — dependency CVE scan`
-  - `Ruff — lint and syntax check`
-  - `Run tests`
-- Do not allow bypassing the above settings
-
-### 2. Branch protection — `kql/**`
-
-Go to **Settings → Branches → Add rule** for `kql/**`:
-
-- Restrict who can push (add only the people who should be allowed to push)
-- Require linear history (keeps git log clean)
-
-This single rule covers every branch matching `kql/anything` — you never need to add a rule per branch.
-
-### 3. GitHub Secrets
-
-Go to **Settings → Secrets and variables → Actions** and add:
-
-| Secret | Description |
-|---|---|
-| `AZURE_FUNCTION_APP_NAME` | Name of your Azure Function App |
-| `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` | Publish profile XML from Azure Portal |
-| `ADX_CLUSTER_URL` | e.g. `https://yourcluster.westeurope.kusto.windows.net` |
-| `DD_API_KEY` | Datadog API key |
-
-To get `AZURE_FUNCTIONAPP_PUBLISH_PROFILE`: Azure Portal → your Function App → **Get publish profile** → paste the entire XML.
-
----
-
 ## Project structure
 
 ```
@@ -160,13 +95,18 @@ queries/your_query_name.kql
 ```bash
 git add queries/your_query_name.kql queries/__init__.py
 git commit -m "add query: your_query_name"
-git push origin kql/your_query_name
+git push -u origin kql/your_query_name
 ```
 
 CI kicks off automatically. Once all checks pass, a PR is auto-created. Get it approved and merged → deploy fires.
 
 > Always branch off `main`, not off another `kql/` branch, so your PR diff is clean.
 > Always commit both files together — CI will fail if `__init__.py` is not updated alongside the `.kql` file.
+
+**Step 6** — Clean up after merge:
+```bash
+git branch -d kql/your_query_name
+```
 
 ---
 
