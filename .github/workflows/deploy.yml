@@ -3,13 +3,13 @@ name: Deploy to Azure Functions
 on:
   push:
     branches:
-      - main  # fires only when a PR is merged into main
+      - main
 
 jobs:
-  deploy:
-    name: Deploy to Azure Functions
+  deploy-uat:
+    name: Deploy to UAT
     runs-on: ubuntu-latest
-
+    environment: uat
     steps:
       - uses: actions/checkout@v4
 
@@ -21,9 +21,32 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Deploy to Azure Functions
+      - name: Deploy to Azure Functions (UAT)
         uses: Azure/functions-action@v1
         with:
-          app-name: ${{ secrets.AZURE_FUNCTION_APP_NAME }}
+          app-name: ${{ secrets.AZURE_FUNCTION_APP_NAME_UAT }}
           package: "."
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE_UAT }}
+
+  deploy-prd:
+    name: Deploy to PRD
+    runs-on: ubuntu-latest
+    needs: deploy-uat
+    environment: prd   # gated 
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Deploy to Azure Functions (PRD)
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ secrets.AZURE_FUNCTION_APP_NAME_PRD }}
+          package: "."
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE_PRD }}
